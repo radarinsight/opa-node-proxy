@@ -4,7 +4,8 @@
   "description": "Proxy Node para integração Opa Suite",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test"
   },
   "type": "commonjs",
   "dependencies": {

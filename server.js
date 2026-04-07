@@ -4,13 +4,66 @@ const axios = require('axios');
 
 const app = express();
 app.use(express.json());
+
+const ALLOWED_ORIGINS = (
+  process.env.ALLOWED_ORIGINS ||
+  '*'
+)
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+function isOriginAllowed(origin) {
+  if (!origin) return true;
+  if (ALLOWED_ORIGINS.includes('*')) return true;
+
+  return ALLOWED_ORIGINS.some((allowed) => {
+    if (allowed === origin) return true;
+
+    if (allowed.includes('*')) {
+      const pattern = new RegExp(
+        `^${allowed
+          .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+          .replace(/\*/g, '.*')}$`,
+        'i'
+      );
+      return pattern.test(origin);
+    }
+
+    return false;
+  });
+}
+
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
+  const origin = req.headers.origin;
+  const allowed = isOriginAllowed(origin);
+
+  if (allowed && origin) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Vary', 'Origin');
+  } else if (ALLOWED_ORIGINS.includes('*')) {
+    res.header('Access-Control-Allow-Origin', '*');
   }
+
+  res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+
+  const requestedHeaders =
+    typeof req.headers['access-control-request-headers'] === 'string'
+      ? req.headers['access-control-request-headers']
+      : '';
+  const defaultHeaders = 'Content-Type, Authorization, X-API-Key, X-Requested-With';
+  const mergedHeaders = [defaultHeaders, requestedHeaders].filter(Boolean).join(', ');
+
+  res.header('Access-Control-Allow-Headers', mergedHeaders);
+
+  if (allowed) {
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+
   next();
 });
 
@@ -279,6 +332,13 @@ app.post('/opa', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`OPA proxy rodando na porta ${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`OPA proxy rodando na porta ${PORT}`);
+  });
+}
+
+module.exports = {
+  app,
+  isOriginAllowed,
+};
